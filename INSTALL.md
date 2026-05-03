@@ -1,7 +1,7 @@
 ```
 # Development convenience
 cp -r $HOME/.ssh .
-# Download LSF CE from https://www.ibm.com/support/pages/where-do-i-download-lsf-community-edition?view=full
+# Download LSF CE from https://www.ibm.com/support/pages/where-do-i-download-lsf-community-edition
 # Build the container
 docker build -f Dockerfile.ubuntu24 -t ubuntu24-lsf-qrmi:dev .
 # After docker run, you can use ctrl-P ctrl-Q to exit without stopping container
