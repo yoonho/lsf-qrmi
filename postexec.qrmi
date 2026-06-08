@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+import sys
+import os
+from dotenv import load_dotenv
+from qrmi import QuantumResource, ResourceType
+
+RES_TYPE_MAP = {
+    "direct-access": ResourceType.IBMQiskitRuntimeService,
+    "quantum-system": ResourceType.IBMQiskitRuntimeService,
+    "qiskit-runtime-service": ResourceType.IBMQiskitRuntimeService,
+    "pasqal-cloud": ResourceType.PasqalCloud,
+    "pasqal-local": ResourceType.PasqalLocal,
+}
+
+# Print message to file, stdout/stderr not available to postexec
+def print_debug(message):
+    if debug:
+        jobid = os.getenv("LSB_JOBID")
+        logfile = f"/tmp/postexec-{jobid}.log"
+        with open(logfile, "a") as f:
+            print(f"{os.path.basename(sys.argv[0])}: [DEBUG] {message}", file=f)
+
+# Print to file and exit
+def print_error(message):
+    jobid = os.getenv("LSB_JOBID")
+    logfile = f"/tmp/postexec-{jobid}.log"
+    with open(logfile, "a") as f:
+        print(f"{os.path.basename(sys.argv[0])}: [ERROR] {message}", file=f)
+    exit(1)
+
+# main
+
+# Load env vars from envfile, then remove envfile
+jobid = os.environ.get("LSB_JOBID")
+envfile = f"/tmp/lsf_post_vars_{jobid}.env"
+if os.path.isfile(envfile):
+    load_dotenv(dotenv_path=envfile)
+    os.remove(envfile)
+else:
+    exit(0)
+
+debug = os.getenv("LSF_QRMI_DEBUG")
+resnames = os.getenv("SLURM_JOB_QPU_RESOURCES")
+restypes = os.getenv("SLURM_JOB_QPU_TYPES")
+if resnames is None or restypes is None:
+    exit(0)
+print_debug(f"resnames {resnames}")
+print_debug(f"restypes {restypes}")
+
+QRMI_LIST_DELIMITER = os.getenv("QRMI_LIST_DELIMITER")
+names = resnames.split(QRMI_LIST_DELIMITER)
+types = restypes.split(QRMI_LIST_DELIMITER)
+
+for idx, name in enumerate(names):
+    # Retrieve acquisition token from PBS variable list
+    env_name = f"{name}_QRMI_JOB_ACQUISITION_TOKEN"
+    token = os.getenv(env_name)
+    if token is None:
+        continue
+    print_debug(f"{name}_QRMI_JOB_ACQUISITION_TOKEN = {token}")
+
+    # Release quantum resources, which were acquired in execjob_begin
+    try:
+        qrmi = QuantumResource(name, RES_TYPE_MAP.get(types[idx]))
+        if qrmi is None:
+            continue
+        qrmi.release(token)
+        print_debug(f"{name}, {types[idx]} released = {token}")
+
+    except RuntimeError as re:
+        print_error(f"{name}, {types[idx]} release failed {re}")
