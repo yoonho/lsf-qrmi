@@ -3,7 +3,6 @@ import sys
 import os
 import subprocess
 import json
-from dotenv import dotenv_values
 from qrmi import QuantumResource, ResourceType, ResourceProvider
 
 RES_TYPE_MAP = {
@@ -64,12 +63,11 @@ def append_resource(name, type, resource_names, resource_types):
         print_debug(f"resource_types {str(resource_types)}")
 
 # main
-# QRMI_QPU_RESOURCES passed in from scheduler or user
+# QRMI_QPU_RESOURCES passed in from user
 resources = os.getenv("QRMI_QPU_RESOURCES")
 job_args = sys.argv[1:]
 if resources:
     debug = os.getenv("LSF_QRMI_DEBUG")
-
     cfg_path = os.path.join(os.getenv("LSF_ENVDIR"), "qrmi_config.json")
     with open(cfg_path, "r", encoding="utf8") as f:
         cfg_json = json.load(f)

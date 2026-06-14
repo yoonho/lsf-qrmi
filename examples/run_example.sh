@@ -21,8 +21,9 @@ apikey=$(env |grep QRMI_IBM_QRS_IAM_APIKEY |awk -F= '{print $2}')
 crn=$(env |grep QRMI_IBM_QRS_SERVICE_CRN |awk -F= '{print $2}')
 
 export QRMI_IBM_QRS_BEST_DEVICE=$( echo $QRMI_JOB_QPU_RESOURCES |  awk -F$QRMI_LIST_DELIMITER '{print $1}' )
-env | sort | grep QRMI_
-exit
+# For debugging
+#env | sort | grep QRMI_
+#exit
 
 # Run Sampler and Estimator QRMI-enabled primitives
 source ~/pyenv/bin/activate
