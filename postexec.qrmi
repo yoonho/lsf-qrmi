@@ -40,8 +40,8 @@ else:
     exit(0)
 
 debug = os.getenv("LSF_QRMI_DEBUG")
-resnames = os.getenv("SLURM_JOB_QPU_RESOURCES")
-restypes = os.getenv("SLURM_JOB_QPU_TYPES")
+resnames = os.getenv("QRMI_JOB_QPU_RESOURCES")
+restypes = os.getenv("QRMI_JOB_QPU_TYPES")
 if resnames is None or restypes is None:
     exit(0)
 print_debug(f"resnames {resnames}")
@@ -57,6 +57,14 @@ for idx, name in enumerate(names):
     token = os.getenv(env_name)
     if token is None:
         continue
+    endpoint = os.getenv(f"{name}_QRMI_IBM_QRS_ENDPOINT")
+    print_debug(f"{name}_QRMI_IBM_QRS_ENDPOINT = {endpoint}")
+    iam_endpoint = os.getenv(f"{name}_QRMI_IBM_QRS_IAM_ENDPOINT")
+    print_debug(f"{name}_QRMI_IBM_QRS_IAM_ENDPOINT = {iam_endpoint}")
+    apikey = os.getenv(f"{name}_QRMI_IBM_QRS_IAM_APIKLEY")
+    print_debug(f"{name}_QRMI_IBM_QRS_IAM_APIKLEY = {apikey}")
+    crn = os.getenv(f"{name}_QRMI_IBM_QRS_SERVICE_CRN")
+    print_debug(f"{name}_QRMI_IBM_QRS_SERVICE_CRN = {crn}")
     print_debug(f"{name}_QRMI_JOB_ACQUISITION_TOKEN = {token}")
 
     # Release quantum resources, which were acquired in execjob_begin

@@ -4,7 +4,7 @@ import os
 import subprocess
 import json
 from dotenv import dotenv_values
-from qrmi import QuantumResource, ResourceType
+from qrmi import QuantumResource, ResourceType, ResourceProvider
 
 RES_TYPE_MAP = {
     "direct-access": ResourceType.IBMQiskitRuntimeService,
@@ -37,6 +37,32 @@ def append_to_lsf_envfile(var):
     except IOError:
         print_error("Cannot write to the temporary envfile")
 
+def process_cfg(name, cfg):
+    for key, value in cfg["environment"].items():
+        env_name = f"{name}_{key}"
+        if os.getenv(env_name) is None:
+            print_debug(f"From qrmi_config.json, {env_name} = {value}")
+            os.environ[env_name] = value
+            append_to_lsf_envfile(f"{env_name}={value}")
+        else:
+            # Use the user-specified variables instead of those in the configuration file
+            print_debug(f"From user, {env_name} = {os.getenv(env_name)}")
+
+def acquire_token(qrmi):
+    name = qrmi.resource_id()
+    token = qrmi.acquire()
+    env_name = f"{name}_QRMI_JOB_ACQUISITION_TOKEN"
+    print_debug(f"Setting {env_name} = {token}")
+    os.environ[env_name] = token
+    append_to_lsf_envfile(f"{env_name}={token}")
+
+def append_resource(name, type, resource_names, resource_types):
+    if name not in resource_names:
+        resource_names.append(name)
+        resource_types.append(type)
+        print_debug(f"resource_name {str(resource_names)}")
+        print_debug(f"resource_types {str(resource_types)}")
+
 # main
 # QRMI_QPU_RESOURCES passed in from scheduler or user
 resources = os.getenv("QRMI_QPU_RESOURCES")
@@ -59,47 +85,49 @@ if resources:
                 print_debug(f"{name} not found in qrmi_config.json. Ignored.")
                 continue
 
-            for key, value in cfg["environment"].items():
-                env_name = f"{name}_{key}"
-                if os.getenv(env_name) is None:
-                    print_debug(f"From qrmi_config.json, {env_name} = {value}")
-                    os.environ[env_name] = value
-                    append_to_lsf_envfile(f"{env_name}={value}")
-                else:
-                    # Use the user-specified variables instead of those in the configuration file
-                    print_debug(f"From user, {env_name} = {os.getenv(env_name)}")
+            if "is_dynamic" in cfg:
+                is_dynamic = cfg["is_dynamic"]
+            else:
+                is_dynamic = False
+            print_debug(f"From qrmi_config.json, is_dynamic = {is_dynamic}")
 
-            try:
-                qrmi = QuantumResource(name, RES_TYPE_MAP.get(cfg["type"]))
-                if qrmi.is_accessible() is False:
-                    print_debug("{name} is inaccessible. Ignored.")
-                    continue
-
-                token = qrmi.acquire()
-                env_name = f"{name}_QRMI_JOB_ACQUISITION_TOKEN"
-                print_debug(f"Setting {env_name} = {token}")
-                os.environ[env_name] = token
-                append_to_lsf_envfile(f"{env_name}={token}")
-
-                # If resource acquisition succeeded, add this resource to verified list
-                resource_names.append(name)
-                resource_types.append(cfg["type"])
-                print_debug("resource_name {str(resource_names)}")
-                print_debug("resource_types {str(resource_types)}")
-
-            except RuntimeError as re:
-                print_error("Failed to process request in QRMI for {name}: {re}")
+            if is_dynamic is False:
+                try:
+                    process_cfg(name, cfg)
+                    qrmi = QuantumResource(name, RES_TYPE_MAP.get(cfg["type"]))
+                    if qrmi.is_accessible() is False:
+                        print_debug("{name} is inaccessible. Ignored.")
+                        continue
+                    acquire_token(qrmi)
+                    append_resource(qrmi.resource_id(), cfg["type"], resource_names, resource_types)
+                except RuntimeError as re:
+                    print_error(f"Failed to process request in QRMI for {name}: {re}")
+            else:
+                try:
+                    provider = ResourceProvider(RES_TYPE_MAP.get(cfg["type"]), cfg["environment"])
+                    filter = os.getenv("QRMI_QPU_RESOURCES_FILTER")
+                    print_debug(f"filter {filter}")
+                    resources = provider.resources(filter)
+                    for qrmi in resources:
+                        if qrmi.is_accessible() is False:
+                            print_debug("{name} is inaccessible. Ignored.")
+                            continue
+                        process_cfg(qrmi.resource_id(), cfg)
+                        acquire_token(qrmi)
+                        append_resource(qrmi.resource_id(), cfg["type"], resource_names, resource_types)
+                except RuntimeError as re:
+                    print_error(f"Failed to process request in QRMI {re}")
 
     if len(resource_names) == 0:
         print_error(f"No specified quantum resources ({resources}) are available")
         exit(1)
 
-    env_name = "SLURM_JOB_QPU_RESOURCES"
+    env_name = "QRMI_JOB_QPU_RESOURCES"
     value = QRMI_LIST_DELIMITER.join(resource_names)
     print_debug(f"Setting {env_name} = {value}")
     os.environ[env_name] = value
     append_to_lsf_envfile(f"{env_name}={value}")
-    env_name = "SLURM_JOB_QPU_TYPES"
+    env_name = "QRMI_JOB_QPU_TYPES"
     value = QRMI_LIST_DELIMITER.join(resource_types)
     print_debug(f"Setting {env_name} = {value}")
     os.environ[env_name] = value
